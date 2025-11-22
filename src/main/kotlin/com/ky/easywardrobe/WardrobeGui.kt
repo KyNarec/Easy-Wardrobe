@@ -20,11 +20,28 @@ object WardrobeGui {
     private const val COLS = 9
     private const val SIZE = COLS * ROWS
 
+    private val GLASS_PANES =
+            listOf(
+                    Items.RED_STAINED_GLASS_PANE,
+                    Items.ORANGE_STAINED_GLASS_PANE,
+                    Items.YELLOW_STAINED_GLASS_PANE,
+                    Items.LIME_STAINED_GLASS_PANE,
+                    Items.GREEN_STAINED_GLASS_PANE,
+                    Items.CYAN_STAINED_GLASS_PANE,
+                    Items.LIGHT_BLUE_STAINED_GLASS_PANE,
+                    Items.BLUE_STAINED_GLASS_PANE,
+                    Items.PURPLE_STAINED_GLASS_PANE
+            )
+
     fun open(player: ServerPlayerEntity) {
         val registryLookup = player.registryManager
         val wardrobeData = WardrobeStorage.loadWardrobeData(player, registryLookup)
 
-        val visualInventory = createVisualInventory(wardrobeData)
+        val visualInventory = SimpleInventory(SIZE)
+        // Populate inventory
+        for (col in 0 until COLS) {
+            updateColumn(visualInventory, wardrobeData, col)
+        }
 
         val factory =
                 SimpleNamedScreenHandlerFactory(
@@ -42,20 +59,24 @@ object WardrobeGui {
         player.openHandledScreen(factory)
     }
 
-    private fun createVisualInventory(data: WardrobeData): Inventory {
-        val inv = SimpleInventory(SIZE)
+    private fun updateColumn(inv: Inventory, data: WardrobeData, col: Int) {
+        val set = data.sets[col]
+        val isActive = (data.activeSet == col)
+        val glassItem = GLASS_PANES[col % GLASS_PANES.size]
 
-        for (col in 0 until COLS) {
-            val set = data.sets[col]
-            val isActive = (data.activeSet == col)
-
-            // Render Armor
-            for (row in 0 until 4) {
-                val stack = set.armor[row].copy()
-                if (isActive && !stack.isEmpty) {
-                    // Add "Equipped" tooltip or similar if possible
-                    // We can't easily modify client-side tooltip without mixins or NBT hacks
-                    // But we can set custom name color
+        // Render Armor (Rows 0-3)
+        for (row in 0 until 4) {
+            val stack = set.armor[row].copy()
+            if (stack.isEmpty) {
+                // Place Glass Pane
+                val glassStack =
+                        ItemStack(glassItem).apply {
+                            set(DataComponentTypes.CUSTOM_NAME, Text.of(" "))
+                        }
+                inv.setStack(col + (row * 9), glassStack)
+            } else {
+                // Place Armor
+                if (isActive) {
                     val name = stack.getName()
                     stack.set(
                             DataComponentTypes.CUSTOM_NAME,
@@ -64,29 +85,27 @@ object WardrobeGui {
                 }
                 inv.setStack(col + (row * 9), stack)
             }
-
-            // Render Button
-            val button =
-                    if (isActive) {
-                        ItemStack(Items.LIME_DYE).apply {
-                            set(DataComponentTypes.CUSTOM_NAME, Text.of("§aEquipped"))
-                        }
-                    } else {
-                        val isEmpty = set.armor.all { it.isEmpty }
-                        if (isEmpty) {
-                            ItemStack(Items.GRAY_DYE).apply {
-                                set(DataComponentTypes.CUSTOM_NAME, Text.of("§7Empty Slot"))
-                            }
-                        } else {
-                            ItemStack(Items.PINK_DYE).apply {
-                                set(DataComponentTypes.CUSTOM_NAME, Text.of("§eClick to Equip"))
-                            }
-                        }
-                    }
-            inv.setStack(col + 36, button)
         }
 
-        return inv
+        // Render Button (Row 4)
+        val button =
+                if (isActive) {
+                    ItemStack(Items.LIME_DYE).apply {
+                        set(DataComponentTypes.CUSTOM_NAME, Text.of("§aEquipped"))
+                    }
+                } else {
+                    val isEmpty = set.armor.all { it.isEmpty }
+                    if (isEmpty) {
+                        ItemStack(Items.GRAY_DYE).apply {
+                            set(DataComponentTypes.CUSTOM_NAME, Text.of("§7Empty Slot"))
+                        }
+                    } else {
+                        ItemStack(Items.PINK_DYE).apply {
+                            set(DataComponentTypes.CUSTOM_NAME, Text.of("§eClick to Equip"))
+                        }
+                    }
+                }
+        inv.setStack(col + 36, button)
     }
 
     class WardrobeScreenHandler(
@@ -120,18 +139,37 @@ object WardrobeGui {
                 }
 
                 if (row < 4) {
-                    super.onSlotClick(slotIndex, button, actionType, player)
+                    // Armor Slot
+                    val currentVisual = visualInventory.getStack(slotIndex)
+                    val isGlass = GLASS_PANES.contains(currentVisual.item)
 
-                    val stack = visualInventory.getStack(slotIndex)
-                    wardrobeData.sets[col].armor[row] = stack.copy()
-
-                    updateButtons()
-                    save()
-                    return
+                    if (isGlass) {
+                        val cursorStack = cursorStack
+                        if (!cursorStack.isEmpty) {
+                            wardrobeData.sets[col].armor[row] = cursorStack.copy()
+                            cursorStack.count = 0
+                            updateColumn(visualInventory, wardrobeData, col)
+                            save()
+                        }
+                        return
+                    } else {
+                        super.onSlotClick(slotIndex, button, actionType, player)
+                        val newStack = visualInventory.getStack(slotIndex)
+                        if (newStack.isEmpty) {
+                            wardrobeData.sets[col].armor[row] = ItemStack.EMPTY
+                        } else {
+                            wardrobeData.sets[col].armor[row] = newStack.copy()
+                        }
+                        updateColumn(visualInventory, wardrobeData, col)
+                        save()
+                        return
+                    }
                 } else if (row == 4) {
                     // Equip Button
                     if (wardrobeData.activeSet != col) {
                         equipSet(col)
+                    } else {
+                        unequipSet(col)
                     }
                     return
                 } else {
@@ -142,50 +180,17 @@ object WardrobeGui {
             super.onSlotClick(slotIndex, button, actionType, player)
         }
 
-        private fun updateButtons() {
-            for (col in 0 until COLS) {
-                val set = wardrobeData.sets[col]
-                val isActive = (wardrobeData.activeSet == col)
-
-                val button =
-                        if (isActive) {
-                            ItemStack(Items.LIME_DYE).apply {
-                                set(DataComponentTypes.CUSTOM_NAME, Text.of("§aEquipped"))
-                            }
-                        } else {
-                            val isEmpty = set.armor.all { it.isEmpty }
-                            if (isEmpty) {
-                                ItemStack(Items.GRAY_DYE).apply {
-                                    set(DataComponentTypes.CUSTOM_NAME, Text.of("§7Empty Slot"))
-                                }
-                            } else {
-                                ItemStack(Items.PINK_DYE).apply {
-                                    set(DataComponentTypes.CUSTOM_NAME, Text.of("§eClick to Equip"))
-                                }
-                            }
-                        }
-                visualInventory.setStack(col + 36, button)
-            }
-        }
-
         private fun equipSet(newCol: Int) {
             val oldCol = wardrobeData.activeSet
 
             // 1. Handle Old Armor
             if (oldCol != -1) {
-                // Save current player armor to old set
                 val oldSet = wardrobeData.sets[oldCol]
                 oldSet.armor[0] = player.getEquippedStack(EquipmentSlot.HEAD).copy()
                 oldSet.armor[1] = player.getEquippedStack(EquipmentSlot.CHEST).copy()
                 oldSet.armor[2] = player.getEquippedStack(EquipmentSlot.LEGS).copy()
                 oldSet.armor[3] = player.getEquippedStack(EquipmentSlot.FEET).copy()
-
-                // Update visual inventory for old set (remove red tint if applied, restore items)
-                for (row in 0 until 4) {
-                    visualInventory.setStack(oldCol + (row * 9), oldSet.armor[row].copy())
-                }
             } else {
-                // Player has armor but no active set. Dump to inventory.
                 val slots =
                         listOf(
                                 EquipmentSlot.HEAD,
@@ -206,8 +211,6 @@ object WardrobeGui {
 
             // 2. Equip New Set
             val newSet = wardrobeData.sets[newCol]
-
-            // Move items to player
             player.equipStack(EquipmentSlot.HEAD, newSet.armor[0].copy())
             player.equipStack(EquipmentSlot.CHEST, newSet.armor[1].copy())
             player.equipStack(EquipmentSlot.LEGS, newSet.armor[2].copy())
@@ -216,22 +219,33 @@ object WardrobeGui {
             // 3. Update Active Set
             wardrobeData.activeSet = newCol
 
-            // 4. Update Visuals for New Set (Ghost Items)
-            // The items remain in newSet.armor (we copied them).
-            // We just need to update the visual inventory to show them (maybe with red tint)
-            for (row in 0 until 4) {
-                val stack = newSet.armor[row].copy()
-                if (!stack.isEmpty) {
-                    val name = stack.getName()
-                    stack.set(
-                            DataComponentTypes.CUSTOM_NAME,
-                            Text.empty().append(name).formatted(Formatting.RED)
-                    )
-                }
-                visualInventory.setStack(newCol + (row * 9), stack)
+            // 4. Update Visuals
+            // Update old column AFTER changing activeSet so it renders as inactive
+            if (oldCol != -1) {
+                updateColumn(visualInventory, wardrobeData, oldCol)
             }
+            updateColumn(visualInventory, wardrobeData, newCol)
 
-            updateButtons()
+            save()
+        }
+
+        private fun unequipSet(col: Int) {
+            val set = wardrobeData.sets[col]
+
+            // Move Player Armor -> Set
+            set.armor[0] = player.getEquippedStack(EquipmentSlot.HEAD).copy()
+            set.armor[1] = player.getEquippedStack(EquipmentSlot.CHEST).copy()
+            set.armor[2] = player.getEquippedStack(EquipmentSlot.LEGS).copy()
+            set.armor[3] = player.getEquippedStack(EquipmentSlot.FEET).copy()
+
+            // Clear Player Armor
+            player.equipStack(EquipmentSlot.HEAD, ItemStack.EMPTY)
+            player.equipStack(EquipmentSlot.CHEST, ItemStack.EMPTY)
+            player.equipStack(EquipmentSlot.LEGS, ItemStack.EMPTY)
+            player.equipStack(EquipmentSlot.FEET, ItemStack.EMPTY)
+
+            wardrobeData.activeSet = -1
+            updateColumn(visualInventory, wardrobeData, col)
             save()
         }
 
