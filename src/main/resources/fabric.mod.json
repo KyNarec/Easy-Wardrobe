@@ -1,0 +1,48 @@
+{
+	"schemaVersion": 1,
+	"id": "easy-wardrobe",
+	"version": "${version}",
+	"name": "Easy Wardrobe",
+	"description": "This mod enables easy access to multiple armor sets.",
+	"authors": [
+		"Me!"
+	],
+	"contact": {
+		"homepage": "https://fabricmc.net/",
+		"sources": "https://github.com/FabricMC/fabric-example-mod"
+	},
+	"license": "CC0-1.0",
+	"icon": "assets/easy-wardrobe/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			{
+				"value": "com.ky.easywardrobe.EasyWardrobe",
+				"adapter": "kotlin"
+			}
+		],
+		"client": [
+			{
+				"value": "com.ky.easywardrobe.EasyWardrobeClient",
+				"adapter": "kotlin"
+			}
+		]
+	},
+	"mixins": [
+		"easy-wardrobe.mixins.json",
+		{
+			"config": "easy-wardrobe.client.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.18.1",
+		"minecraft": "~1.21.7",
+		"java": ">=21",
+		"fabric-api": "*",
+		"fabric-language-kotlin": "*"
+	},
+	"suggests": {
+		"another-mod": "*"
+	}
+}
