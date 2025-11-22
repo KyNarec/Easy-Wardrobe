@@ -5,13 +5,14 @@
 	"name": "Easy Wardrobe",
 	"description": "This mod enables easy access to multiple armor sets.",
 	"authors": [
-		"Me!"
+		"KyNarec"
 	],
 	"contact": {
-		"homepage": "https://fabricmc.net/",
-		"sources": "https://github.com/FabricMC/fabric-example-mod"
+		"homepage": "https://github.com/KyNarec/Easy-Wardrobe/",
+		"sources": "https://github.com/KyNarec/Easy-Wardrobe/",
+        "issues": "https://github.com/KyNarec/Easy-Wardrobe/issues"
 	},
-	"license": "CC0-1.0",
+	"license": "GPL-3.0-or-later",
 	"icon": "assets/easy-wardrobe/icon.png",
 	"environment": "*",
 	"entrypoints": {
@@ -36,7 +37,7 @@
 		}
 	],
 	"depends": {
-		"fabricloader": ">=0.18.1",
+		"fabricloader": ">=0.17.2",
 		"minecraft": "~1.21.7",
 		"java": ">=21",
 		"fabric-api": "*",
